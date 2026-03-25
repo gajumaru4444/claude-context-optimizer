@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """
-decision_manager.py - 意思決定の手動管理CLIツール
-Claude Codeから /decision コマンドで呼び出せる
+decision_manager.py - Decision management CLI tool
+Can be invoked from Claude Code via the /decision command
 
-使い方:
-  python3 decision_manager.py add "タイトル" --content "詳細" --category architecture
+Usage:
+  python3 decision_manager.py add "Title" --content "Details" --category architecture
   python3 decision_manager.py list
   python3 decision_manager.py list --category architecture
-  python3 decision_manager.py update <id> --content "新しい詳細"
-  python3 decision_manager.py supersede <id> --reason "理由"
+  python3 decision_manager.py update <id> --content "New details"
+  python3 decision_manager.py supersede <id> --reason "Reason"
   python3 decision_manager.py show <id>
   python3 decision_manager.py history
 """
@@ -49,7 +49,7 @@ def save_decisions(context_dir: Path, data: dict):
     data["last_updated"] = datetime.now().isoformat()
     with open(decisions_file, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
-    print(f"✅ 保存: {decisions_file}")
+    print(f"Saved: {decisions_file}")
 
 
 def generate_version(decisions: list) -> str:
@@ -66,7 +66,7 @@ def generate_version(decisions: list) -> str:
 
 
 def cmd_add(args, context_dir: Path):
-    """意思決定を追加する"""
+    """Add a decision"""
     data = load_decisions(context_dir)
     decisions = data.get("decisions", [])
 
@@ -92,21 +92,21 @@ def cmd_add(args, context_dir: Path):
     data["decisions"] = decisions
     save_decisions(context_dir, data)
 
-    print(f"\n📌 意思決定を追加しました")
+    print(f"\nDecision added")
     print(f"  ID      : {new_id}")
-    print(f"  バージョン: {version}")
-    print(f"  タイトル  : {args.title}")
-    print(f"  カテゴリ  : {args.category or 'general'}")
+    print(f"  Version : {version}")
+    print(f"  Title   : {args.title}")
+    print(f"  Category: {args.category or 'general'}")
     if args.content:
-        print(f"  詳細    : {args.content}")
+        print(f"  Details : {args.content}")
 
 
 def cmd_list(args, context_dir: Path):
-    """意思決定一覧を表示する"""
+    """List decisions"""
     data = load_decisions(context_dir)
     decisions = data.get("decisions", [])
 
-    # フィルタリング
+    # Filtering
     filtered = decisions
     if args.category:
         filtered = [d for d in filtered if d.get("category") == args.category]
@@ -116,10 +116,10 @@ def cmd_list(args, context_dir: Path):
         filtered = [d for d in filtered if d.get("status") == "active"]
 
     if not filtered:
-        print("該当する意思決定がありません")
+        print("No matching decisions found")
         return
 
-    print(f"\n📋 意思決定一覧 ({len(filtered)}件)\n")
+    print(f"\nDecision list ({len(filtered)} entries)\n")
     print(f"{'ID':<12} {'Ver':<6} {'Category':<15} {'Status':<12} {'Date':<12} Title")
     print("-" * 90)
     for d in filtered:
@@ -135,38 +135,38 @@ def cmd_list(args, context_dir: Path):
 
 
 def cmd_show(args, context_dir: Path):
-    """特定の意思決定の詳細を表示する"""
+    """Show details of a specific decision"""
     data = load_decisions(context_dir)
     decisions = data.get("decisions", [])
 
     target = next((d for d in decisions if d.get("id") == args.id), None)
     if not target:
-        print(f"❌ ID '{args.id}' が見つかりません")
+        print(f"Error: ID '{args.id}' not found")
         sys.exit(1)
 
-    print(f"\n📌 意思決定詳細\n")
+    print(f"\nDecision details\n")
     for key, value in target.items():
         print(f"  {key:<15}: {value}")
 
 
 def cmd_update(args, context_dir: Path):
-    """既存の意思決定を更新する（バージョンアップ）"""
+    """Update an existing decision (version upgrade)"""
     data = load_decisions(context_dir)
     decisions = data.get("decisions", [])
 
     target = next((d for d in decisions if d.get("id") == args.id), None)
     if not target:
-        print(f"❌ ID '{args.id}' が見つかりません")
+        print(f"Error: ID '{args.id}' not found")
         sys.exit(1)
 
     now = datetime.now().isoformat()
     old_version = target.get("version", "v0")
 
-    # 古いものをsupersededに
+    # Mark old one as superseded
     target["status"] = "superseded"
     target["superseded_at"] = now
 
-    # 新しいバージョンを追加
+    # Add new version
     new_id = f"dec_{len(decisions) + 1:04d}"
     new_version = generate_version(decisions)
 
@@ -188,19 +188,19 @@ def cmd_update(args, context_dir: Path):
     data["decisions"] = decisions
     save_decisions(context_dir, data)
 
-    print(f"\n🔄 意思決定を更新しました")
-    print(f"  {old_version} → {new_version} ({args.id} → {new_id})")
-    print(f"  タイトル: {new_decision['title']}")
+    print(f"\nDecision updated")
+    print(f"  {old_version} -> {new_version} ({args.id} -> {new_id})")
+    print(f"  Title: {new_decision['title']}")
 
 
 def cmd_supersede(args, context_dir: Path):
-    """意思決定をsupersededにマークする"""
+    """Mark a decision as superseded"""
     data = load_decisions(context_dir)
     decisions = data.get("decisions", [])
 
     target = next((d for d in decisions if d.get("id") == args.id), None)
     if not target:
-        print(f"❌ ID '{args.id}' が見つかりません")
+        print(f"Error: ID '{args.id}' not found")
         sys.exit(1)
 
     target["status"] = "superseded"
@@ -210,18 +210,18 @@ def cmd_supersede(args, context_dir: Path):
 
     data["decisions"] = decisions
     save_decisions(context_dir, data)
-    print(f"✅ {args.id} をsupersededにマークしました")
+    print(f"Marked {args.id} as superseded")
 
 
 def cmd_history(args, context_dir: Path):
-    """スナップショット履歴を表示する"""
+    """Show snapshot history"""
     history_dir = context_dir / "decisions_history"
     if not history_dir.exists():
-        print("スナップショット履歴がありません")
+        print("No snapshot history found")
         return
 
     snapshots = sorted(history_dir.iterdir(), reverse=True)
-    print(f"\n📚 スナップショット履歴 ({len(snapshots)}件)\n")
+    print(f"\nSnapshot history ({len(snapshots)} entries)\n")
     for snap in snapshots:
         snap_file = snap / "decisions.json"
         count = 0
@@ -232,47 +232,47 @@ def cmd_history(args, context_dir: Path):
                     count = len([x for x in d.get("decisions", []) if x.get("status") == "active"])
             except Exception:
                 pass
-        print(f"  {snap.name}  (active: {count}件)")
+        print(f"  {snap.name}  (active: {count})")
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Context Optimizer - 意思決定管理CLI",
+        description="Context Optimizer - Decision Management CLI",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     subparsers = parser.add_subparsers(dest="command")
 
     # add
-    p_add = subparsers.add_parser("add", help="意思決定を追加")
-    p_add.add_argument("title", help="意思決定のタイトル")
-    p_add.add_argument("--content", "-c", help="詳細説明")
-    p_add.add_argument("--category", "-cat", choices=VALID_CATEGORIES, help="カテゴリ")
-    p_add.add_argument("--tags", "-t", help="タグ（カンマ区切り）")
+    p_add = subparsers.add_parser("add", help="Add a decision")
+    p_add.add_argument("title", help="Decision title")
+    p_add.add_argument("--content", "-c", help="Detailed description")
+    p_add.add_argument("--category", "-cat", choices=VALID_CATEGORIES, help="Category")
+    p_add.add_argument("--tags", "-t", help="Tags (comma-separated)")
 
     # list
-    p_list = subparsers.add_parser("list", help="一覧表示")
+    p_list = subparsers.add_parser("list", help="List decisions")
     p_list.add_argument("--category", "-cat", choices=VALID_CATEGORIES)
     p_list.add_argument("--status", "-s", choices=VALID_STATUSES)
 
     # show
-    p_show = subparsers.add_parser("show", help="詳細表示")
-    p_show.add_argument("id", help="意思決定ID (例: dec_0001)")
+    p_show = subparsers.add_parser("show", help="Show decision details")
+    p_show.add_argument("id", help="Decision ID (e.g., dec_0001)")
 
     # update
-    p_update = subparsers.add_parser("update", help="更新（バージョンアップ）")
-    p_update.add_argument("id", help="更新対象のID")
-    p_update.add_argument("--title", help="新しいタイトル")
-    p_update.add_argument("--content", "-c", help="新しい詳細説明")
+    p_update = subparsers.add_parser("update", help="Update a decision (version upgrade)")
+    p_update.add_argument("id", help="ID of the decision to update")
+    p_update.add_argument("--title", help="New title")
+    p_update.add_argument("--content", "-c", help="New detailed description")
     p_update.add_argument("--category", "-cat", choices=VALID_CATEGORIES)
-    p_update.add_argument("--tags", "-t", help="タグ（カンマ区切り）")
+    p_update.add_argument("--tags", "-t", help="Tags (comma-separated)")
 
     # supersede
-    p_sup = subparsers.add_parser("supersede", help="意思決定を無効化")
-    p_sup.add_argument("id", help="対象のID")
-    p_sup.add_argument("--reason", "-r", help="無効化の理由")
+    p_sup = subparsers.add_parser("supersede", help="Mark a decision as superseded")
+    p_sup.add_argument("id", help="Target ID")
+    p_sup.add_argument("--reason", "-r", help="Reason for superseding")
 
     # history
-    subparsers.add_parser("history", help="スナップショット履歴を表示")
+    subparsers.add_parser("history", help="Show snapshot history")
 
     args = parser.parse_args()
     context_dir = get_context_dir()

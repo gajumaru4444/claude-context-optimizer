@@ -1,4 +1,4 @@
-"""decision_manager.py のテスト"""
+"""Tests for decision_manager.py"""
 
 import json
 import subprocess
@@ -38,7 +38,7 @@ def load_decisions(project_dir):
 
 class TestAdd:
     def test_add_basic(self, project_dir):
-        """基本的な意思決定の追加"""
+        """Basic decision addition"""
         result = run_manager(project_dir, ["add", "TypeScriptを採用"])
         assert result.returncode == 0
 
@@ -50,38 +50,38 @@ class TestAdd:
         assert data["decisions"][0]["version"] == "v1"
 
     def test_add_with_category(self, project_dir):
-        """カテゴリ指定付きの追加"""
+        """Addition with category specified"""
         run_manager(project_dir, ["add", "REST APIを採用", "--category", "api"])
 
         data = load_decisions(project_dir)
         assert data["decisions"][0]["category"] == "api"
 
     def test_add_with_content(self, project_dir):
-        """詳細説明付きの追加"""
+        """Addition with detailed description"""
         run_manager(project_dir, ["add", "PostgreSQL", "--content", "スケーラビリティのため"])
 
         data = load_decisions(project_dir)
         assert data["decisions"][0]["content"] == "スケーラビリティのため"
 
     def test_add_with_tags(self, project_dir):
-        """タグ付きの追加"""
+        """Addition with tags"""
         run_manager(project_dir, ["add", "Docker化", "--tags", "infra,devops"])
 
         data = load_decisions(project_dir)
         assert data["decisions"][0]["tags"] == ["infra", "devops"]
 
     def test_add_increments_version(self, project_dir):
-        """追加するたびにバージョンが増加する"""
-        run_manager(project_dir, ["add", "決定1"])
-        run_manager(project_dir, ["add", "決定2"])
+        """Version increments with each addition"""
+        run_manager(project_dir, ["add", "Decision 1"])
+        run_manager(project_dir, ["add", "Decision 2"])
 
         data = load_decisions(project_dir)
         assert data["decisions"][0]["version"] == "v1"
         assert data["decisions"][1]["version"] == "v2"
 
     def test_add_updates_last_updated(self, project_dir):
-        """last_updated が更新される"""
-        run_manager(project_dir, ["add", "テスト"])
+        """last_updated is updated"""
+        run_manager(project_dir, ["add", "Test"])
 
         data = load_decisions(project_dir)
         assert data["last_updated"] is not None
@@ -89,70 +89,70 @@ class TestAdd:
 
 class TestList:
     def test_list_empty(self, project_dir):
-        """意思決定がない場合"""
+        """When there are no decisions"""
         result = run_manager(project_dir, ["list"])
         assert result.returncode == 0
-        assert "該当する意思決定がありません" in result.stdout
+        assert "No matching decisions found" in result.stdout
 
     def test_list_shows_active(self, project_dir):
-        """アクティブな意思決定を表示"""
-        run_manager(project_dir, ["add", "テスト決定"])
+        """Shows active decisions"""
+        run_manager(project_dir, ["add", "Test decision"])
         result = run_manager(project_dir, ["list"])
-        assert "テスト決定" in result.stdout
+        assert "Test decision" in result.stdout
 
     def test_list_filter_by_category(self, project_dir):
-        """カテゴリフィルタ"""
-        run_manager(project_dir, ["add", "API設計", "--category", "api"])
-        run_manager(project_dir, ["add", "DB設計", "--category", "architecture"])
+        """Category filter"""
+        run_manager(project_dir, ["add", "API design", "--category", "api"])
+        run_manager(project_dir, ["add", "DB design", "--category", "architecture"])
 
         result = run_manager(project_dir, ["list", "--category", "api"])
-        assert "API設計" in result.stdout
-        assert "DB設計" not in result.stdout
+        assert "API design" in result.stdout
+        assert "DB design" not in result.stdout
 
 
 class TestUpdate:
     def test_update_creates_new_version(self, project_dir):
-        """更新すると新しいバージョンが作成される"""
-        run_manager(project_dir, ["add", "元の決定"])
-        run_manager(project_dir, ["update", "dec_0001", "--title", "更新後の決定"])
+        """Updating creates a new version"""
+        run_manager(project_dir, ["add", "Original decision"])
+        run_manager(project_dir, ["update", "dec_0001", "--title", "Updated decision"])
 
         data = load_decisions(project_dir)
         assert len(data["decisions"]) == 2
         assert data["decisions"][0]["status"] == "superseded"
-        assert data["decisions"][1]["title"] == "更新後の決定"
+        assert data["decisions"][1]["title"] == "Updated decision"
         assert data["decisions"][1]["status"] == "active"
 
     def test_update_nonexistent_id(self, project_dir):
-        """存在しないIDの更新はエラー"""
+        """Updating a nonexistent ID returns an error"""
         result = run_manager(project_dir, ["update", "dec_9999", "--title", "test"])
         assert result.returncode == 1
 
 
 class TestSupersede:
     def test_supersede_marks_status(self, project_dir):
-        """supersede で status が変更される"""
-        run_manager(project_dir, ["add", "古い決定"])
-        run_manager(project_dir, ["supersede", "dec_0001", "--reason", "方針変更"])
+        """supersede changes the status"""
+        run_manager(project_dir, ["add", "Old decision"])
+        run_manager(project_dir, ["supersede", "dec_0001", "--reason", "Policy change"])
 
         data = load_decisions(project_dir)
         assert data["decisions"][0]["status"] == "superseded"
-        assert data["decisions"][0]["supersede_reason"] == "方針変更"
+        assert data["decisions"][0]["supersede_reason"] == "Policy change"
 
     def test_supersede_nonexistent_id(self, project_dir):
-        """存在しないIDの supersede はエラー"""
+        """Superseding a nonexistent ID returns an error"""
         result = run_manager(project_dir, ["supersede", "dec_9999"])
         assert result.returncode == 1
 
 
 class TestShow:
     def test_show_displays_details(self, project_dir):
-        """詳細表示"""
-        run_manager(project_dir, ["add", "詳細テスト", "--content", "詳しい内容"])
+        """Shows decision details"""
+        run_manager(project_dir, ["add", "Detail test", "--content", "Detailed content"])
         result = run_manager(project_dir, ["show", "dec_0001"])
-        assert "詳細テスト" in result.stdout
-        assert "詳しい内容" in result.stdout
+        assert "Detail test" in result.stdout
+        assert "Detailed content" in result.stdout
 
     def test_show_nonexistent_id(self, project_dir):
-        """存在しないIDの表示はエラー"""
+        """Showing a nonexistent ID returns an error"""
         result = run_manager(project_dir, ["show", "dec_9999"])
         assert result.returncode == 1

@@ -4,9 +4,9 @@
  * claude-context-optimizer CLI
  *
  * Usage:
- *   npx claude-context-optimizer          # カレントディレクトリにinit
- *   npx claude-context-optimizer init     # 同上（明示的）
- *   npx claude-context-optimizer --global # ~/.claude に展開（全プロジェクト共通）
+ *   npx claude-context-optimizer          # Initialize in current directory
+ *   npx claude-context-optimizer init     # Same as above (explicit)
+ *   npx claude-context-optimizer --global # Deploy to ~/.claude (shared across all projects)
  *   npx claude-context-optimizer --help
  */
 
@@ -19,7 +19,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const TEMPLATES_DIR = join(__dirname, "..", "templates");
 
-// ── ANSI カラー ──────────────────────────────────────────
+// ── ANSI Colors ──────────────────────────────────────────
 const c = {
   reset: "\x1b[0m",
   bold:  "\x1b[1m",
@@ -37,7 +37,7 @@ const err  = (s) => `${c.red}✖${c.reset} ${s}`;
 const bold = (s) => `${c.bold}${s}${c.reset}`;
 const gray = (s) => `${c.gray}${s}${c.reset}`;
 
-// ── ユーティリティ ───────────────────────────────────────
+// ── Utilities ────────────────────────────────────────────
 function ask(question) {
   const rl = createInterface({ input: process.stdin, output: process.stdout });
   return new Promise((resolve) => {
@@ -48,7 +48,7 @@ function ask(question) {
   });
 }
 
-/** ディレクトリを再帰的にコピー（衝突ファイルはリストで返す） */
+/** Recursively collect files from a directory (conflicting files are returned in a list) */
 function collectFiles(srcDir, destDir, baseSrc = srcDir) {
   const files = [];
   for (const name of readdirSync(srcDir)) {
@@ -63,7 +63,7 @@ function collectFiles(srcDir, destDir, baseSrc = srcDir) {
   return files;
 }
 
-/** JSON を安全にマージ（既存キーは上書きしない・hooksは配列をマージ） */
+/** Safely merge JSON (existing keys are preserved, hooks arrays are merged) */
 function mergeJson(existing, incoming) {
   const merged = { ...existing };
   for (const [key, val] of Object.entries(incoming)) {
@@ -72,19 +72,17 @@ function mergeJson(existing, incoming) {
     } else if (key === "hooks" && typeof val === "object" && !Array.isArray(val)) {
       merged.hooks = mergeHooks(merged.hooks || {}, val);
     }
-    // その他のキーは既存を優先（上書きしない）
   }
   return merged;
 }
 
-/** settings.json の hooks セクション専用マージ */
+/** Merge the hooks section of settings.json */
 function mergeHooks(existing, incoming) {
   const merged = { ...existing };
   for (const [event, entries] of Object.entries(incoming)) {
     if (!merged[event]) {
       merged[event] = entries;
     } else {
-      // 既存エントリに同じコマンドがなければ追記
       const existingCmds = (merged[event] || [])
         .flatMap((h) => h.hooks || [])
         .map((h) => h.command);
@@ -97,30 +95,27 @@ function mergeHooks(existing, incoming) {
   return merged;
 }
 
-/** CLAUDE.md の optimizer セクションをマージ（なければ末尾に追記） */
+/** Merge the optimizer section into CLAUDE.md (append to end if not present) */
 function mergeCLAUDEmd(existingContent, incomingContent) {
   const MARKER = "<!-- CONTEXT-OPTIMIZER:START -->";
   if (existingContent.includes(MARKER)) {
-    // 既にセクションあり → そのまま（session_start.pyが更新するので触らない）
-    return null; // null = 変更なし
+    return null;
   }
-  // セクションを末尾に追記
   const section = incomingContent.split(MARKER).slice(1).join(MARKER);
   return existingContent.trimEnd() + "\n\n" + MARKER + section;
 }
 
-// ── メイン処理 ───────────────────────────────────────────
+// ── Main ─────────────────────────────────────────────────
 async function init(targetDir) {
   console.log();
-  console.log(bold("  Claude Context Optimizer - セットアップ"));
-  console.log(gray(`  ターゲット: ${targetDir}`));
+  console.log(bold("  Claude Context Optimizer - Setup"));
+  console.log(gray(`  Target: ${targetDir}`));
   console.log();
 
   const files = collectFiles(TEMPLATES_DIR, targetDir);
   const conflicts = [];
   const mergeTargets = [];
 
-  // 衝突チェック
   for (const f of files) {
     if (!existsSync(f.dest)) continue;
     const name = f.rel;
@@ -131,15 +126,13 @@ async function init(targetDir) {
     }
   }
 
-  // 通常ファイルの衝突確認
   if (conflicts.length > 0) {
-    console.log(warn("以下のファイルが既に存在します:"));
+    console.log(warn("The following files already exist:"));
     for (const f of conflicts) console.log(`  ${gray(f.rel)}`);
-    const ans = await ask(`  上書きしますか？ ${gray("[y/N]")} `);
+    const ans = await ask(`  Overwrite? ${gray("[y/N]")} `);
     if (ans.toLowerCase() !== "y") {
-      console.log(info("既存ファイルはスキップします"));
+      console.log(info("Skipping existing files"));
     } else {
-      // overwrite フラグ
       conflicts.forEach((f) => (f.overwrite = true));
     }
   }
@@ -152,7 +145,6 @@ async function init(targetDir) {
     const isMerge = mergeTargets.includes(f);
     const isConflict = conflicts.includes(f);
 
-    // ── マージ対象 ──
     if (isMerge) {
       const existing = readFileSync(f.dest, "utf8");
       const incoming = readFileSync(f.src, "utf8");
@@ -160,11 +152,11 @@ async function init(targetDir) {
       if (f.rel === "CLAUDE.md") {
         const result = mergeCLAUDEmd(existing, incoming);
         if (result === null) {
-          console.log(info(`マージ不要（既にセクションあり）: ${gray(f.rel)}`));
+          console.log(info(`Merge not needed (section already exists): ${gray(f.rel)}`));
           skipped++;
         } else {
           writeFileSync(f.dest, result, "utf8");
-          console.log(ok(`マージ: ${bold(f.rel)}`));
+          console.log(ok(`Merged: ${bold(f.rel)}`));
           merged++;
         }
       } else if (f.rel === ".claude/settings.json") {
@@ -173,30 +165,27 @@ async function init(targetDir) {
           const incomingJson = JSON.parse(incoming);
           const mergedJson = mergeJson(existingJson, incomingJson);
           writeFileSync(f.dest, JSON.stringify(mergedJson, null, 2) + "\n", "utf8");
-          console.log(ok(`マージ: ${bold(f.rel)}`));
+          console.log(ok(`Merged: ${bold(f.rel)}`));
           merged++;
         } catch {
-          console.log(warn(`JSON マージ失敗、スキップ: ${f.rel}`));
+          console.log(warn(`JSON merge failed, skipped: ${f.rel}`));
           skipped++;
         }
       }
       continue;
     }
 
-    // ── 衝突で上書きスキップ ──
     if (isConflict && !f.overwrite) {
-      console.log(gray(`  スキップ: ${f.rel}`));
+      console.log(gray(`  Skipped: ${f.rel}`));
       skipped++;
       continue;
     }
 
-    // ── 通常コピー ──
     copyFileSync(f.src, f.dest);
-    console.log(ok(`コピー: ${bold(f.rel)}`));
+    console.log(ok(`Copied: ${bold(f.rel)}`));
     copied++;
   }
 
-  // 実行権限（hooksディレクトリのpyファイル）
   try {
     const hooksDir = join(targetDir, ".claude", "hooks");
     if (existsSync(hooksDir)) {
@@ -209,39 +198,37 @@ async function init(targetDir) {
     }
   } catch { /* ignore */ }
 
-  // 完了メッセージ
   console.log();
-  console.log(bold("  ✅ セットアップ完了"));
-  console.log(`  ${gray(`コピー: ${copied}件 / マージ: ${merged}件 / スキップ: ${skipped}件`)}`);
+  console.log(bold("  Setup complete!"));
+  console.log(`  ${gray(`Copied: ${copied} / Merged: ${merged} / Skipped: ${skipped}`)}`);
   console.log();
-  console.log(bold("  次のステップ:"));
-  console.log(`  ${c.cyan}1.${c.reset} Claude Code を起動する`);
-  console.log(`  ${c.cyan}2.${c.reset} CLAUDE.md が自動更新されることを確認`);
-  console.log(`  ${c.cyan}3.${c.reset} 意思決定の手動追加:`);
-  console.log(`     ${gray("python3 .claude/hooks/decision_manager.py add \"タイトル\" --category architecture")}`);
+  console.log(bold("  Next steps:"));
+  console.log(`  ${c.cyan}1.${c.reset} Start Claude Code`);
+  console.log(`  ${c.cyan}2.${c.reset} Verify that CLAUDE.md is auto-updated`);
+  console.log(`  ${c.cyan}3.${c.reset} Manually add decisions:`);
+  console.log(`     ${gray("python3 .claude/hooks/decision_manager.py add \"Title\" --category architecture")}`);
   console.log();
 }
 
-// ── グローバルモード（~/.claude に展開）───────────────────
+// ── Global Mode (deploy to ~/.claude) ────────────────────
 async function initGlobal() {
   const homeDir = process.env.HOME || process.env.USERPROFILE;
   if (!homeDir) {
-    console.error(err("HOME ディレクトリが取得できません"));
+    console.error(err("Could not determine HOME directory"));
     process.exit(1);
   }
   const globalClaudeDir = join(homeDir, ".claude");
   console.log();
-  console.log(bold("  グローバルモード"));
-  console.log(info(`展開先: ${bold(globalClaudeDir)}`));
-  console.log(warn("全プロジェクトに共通のHooksが適用されます"));
+  console.log(bold("  Global Mode"));
+  console.log(info(`Target: ${bold(globalClaudeDir)}`));
+  console.log(warn("Hooks will be applied to all projects"));
   console.log();
-  const ans = await ask(`  続行しますか？ ${gray("[y/N]")} `);
+  const ans = await ask(`  Continue? ${gray("[y/N]")} `);
   if (ans.toLowerCase() !== "y") {
-    console.log("キャンセルしました");
+    console.log("Cancelled");
     process.exit(0);
   }
 
-  // グローバルは hooks/ と settings.json のみ（CLAUDE.mdは展開しない）
   const srcHooks    = join(TEMPLATES_DIR, ".claude", "hooks");
   const destHooks   = join(globalClaudeDir, "hooks");
   const srcSettings = join(TEMPLATES_DIR, ".claude", "settings.json");
@@ -249,75 +236,72 @@ async function initGlobal() {
 
   mkdirSync(destHooks, { recursive: true });
 
-  // hooks コピー
   for (const f of readdirSync(srcHooks)) {
     const dest = join(destHooks, f);
     if (!existsSync(dest)) {
       copyFileSync(join(srcHooks, f), dest);
-      console.log(ok(`コピー: ${bold("~/.claude/hooks/" + f)}`));
+      console.log(ok(`Copied: ${bold("~/.claude/hooks/" + f)}`));
     } else {
-      console.log(gray(`  スキップ（既存）: ~/.claude/hooks/${f}`));
+      console.log(gray(`  Skipped (exists): ~/.claude/hooks/${f}`));
     }
   }
 
-  // settings.json マージ
   if (existsSync(destSettings)) {
     try {
       const existing = JSON.parse(readFileSync(destSettings, "utf8"));
       const incoming = JSON.parse(readFileSync(srcSettings, "utf8"));
-      // グローバル用: $CLAUDE_PROJECT_DIR パスを ~/.claude/hooks に書き換え
       const incomingStr = JSON.stringify(incoming)
         .replaceAll("$CLAUDE_PROJECT_DIR/.claude/hooks", `${globalClaudeDir}/hooks`);
       const incomingGlobal = JSON.parse(incomingStr);
       const merged = mergeJson(existing, incomingGlobal);
       writeFileSync(destSettings, JSON.stringify(merged, null, 2) + "\n", "utf8");
-      console.log(ok(`マージ: ${bold("~/.claude/settings.json")}`));
+      console.log(ok(`Merged: ${bold("~/.claude/settings.json")}`));
     } catch {
-      console.log(warn("settings.json のマージに失敗しました。手動で確認してください。"));
+      console.log(warn("Failed to merge settings.json. Please check manually."));
     }
   } else {
     const incoming = readFileSync(srcSettings, "utf8");
     const incomingGlobal = incoming
       .replaceAll("$CLAUDE_PROJECT_DIR/.claude/hooks", `${globalClaudeDir}/hooks`);
     writeFileSync(destSettings, incomingGlobal, "utf8");
-    console.log(ok(`作成: ${bold("~/.claude/settings.json")}`));
+    console.log(ok(`Created: ${bold("~/.claude/settings.json")}`));
   }
 
   console.log();
-  console.log(bold("  ✅ グローバルセットアップ完了"));
-  console.log(info("次回 Claude Code 起動時から全プロジェクトに適用されます"));
+  console.log(bold("  Global setup complete!"));
+  console.log(info("Hooks will be active for all projects on next Claude Code launch"));
   console.log();
 }
 
-// ── ヘルプ ───────────────────────────────────────────────
+// ── Help ─────────────────────────────────────────────────
 function showHelp() {
   console.log(`
-${bold("  claude-context-optimizer")} - Claude Codeコンテキスト最適化ツール
+${bold("  claude-context-optimizer")} - Context optimization tool for Claude Code
 
-${bold("  使い方:")}
-    npx claude-context-optimizer          カレントディレクトリにセットアップ
-    npx claude-context-optimizer init     同上（明示的）
-    npx claude-context-optimizer --global 全プロジェクト共通（~/.claude）にセットアップ
-    npx claude-context-optimizer --help   このヘルプを表示
+${bold("  Usage:")}
+    npx claude-context-optimizer          Initialize in current directory
+    npx claude-context-optimizer init     Same as above (explicit)
+    npx claude-context-optimizer --global Deploy to ~/.claude (all projects)
+    npx claude-context-optimizer --help   Show this help
 
-${bold("  展開されるファイル:")}
+${bold("  Files deployed:")}
     .claude/hooks/session_start.py        SessionStart hook
-    .claude/hooks/on_stop.py              Stop hook（意思決定の自動検出）
+    .claude/hooks/on_stop.py              Stop hook (auto-detect decisions)
     .claude/hooks/session_end.py          SessionEnd hook
-    .claude/hooks/decision_manager.py     手動管理CLI
-    .claude/settings.json                 Hooks設定（既存があればマージ）
-    .claude/context/decisions.json        意思決定ログ
-    .claude/context/context_summary.md    セッションサマリー
-    CLAUDE.md                             テンプレート（既存があればマージ）
+    .claude/hooks/decision_manager.py     Decision management CLI
+    .claude/settings.json                 Hooks config (merged if exists)
+    .claude/context/decisions.json        Decision log
+    .claude/context/context_summary.md    Session summary
+    CLAUDE.md                             Template (merged if exists)
 
-${bold("  既存ファイルの扱い:")}
-    settings.json → hooks セクションをマージ（既存設定は保持）
-    CLAUDE.md     → optimizer セクションを末尾に追記
-    その他        → 上書き確認あり
+${bold("  Existing file handling:")}
+    settings.json  Hooks section merged (existing settings preserved)
+    CLAUDE.md      Optimizer section appended to end
+    Others         Overwrite confirmation prompt
 `);
 }
 
-// ── エントリーポイント ────────────────────────────────────
+// ── Entry point ──────────────────────────────────────────
 const args = process.argv.slice(2);
 
 if (args.includes("--help") || args.includes("-h")) {

@@ -1,4 +1,4 @@
-"""on_stop.py のテスト（意思決定の自動検出）"""
+"""Tests for on_stop.py (automatic decision detection)"""
 
 import json
 import subprocess
@@ -22,7 +22,7 @@ def project_dir(tmp_path):
 
 
 def create_transcript(tmp_path, messages):
-    """テスト用 transcript ファイルを作成"""
+    """Create a test transcript file"""
     transcript_path = tmp_path / "transcript.jsonl"
     lines = []
     for role, text in messages:
@@ -52,7 +52,7 @@ def load_decisions(project_dir):
 
 class TestDecisionDetection:
     def test_detects_japanese_decision(self, project_dir):
-        """日本語の「〜に決めました」パターンを検出"""
+        """Detects Japanese decision pattern (decided to)"""
         transcript = create_transcript(project_dir, [
             ("assistant", "データベースはPostgreSQLを使用することに決めました。"),
         ])
@@ -65,7 +65,7 @@ class TestDecisionDetection:
         assert len(data["decisions"]) > 0
 
     def test_detects_adoption_pattern(self, project_dir):
-        """「〜を採用」パターンを検出"""
+        """Detects Japanese adoption pattern (will adopt)"""
         transcript = create_transcript(project_dir, [
             ("assistant", "フレームワークとしてNext.jsを採用します。"),
         ])
@@ -77,7 +77,7 @@ class TestDecisionDetection:
         assert len(data["decisions"]) > 0
 
     def test_detects_policy_pattern(self, project_dir):
-        """「〜方針で進めます」パターンを検出"""
+        """Detects Japanese policy pattern (proceed with policy)"""
         transcript = create_transcript(project_dir, [
             ("assistant", "テストカバレッジ80%以上の方針で進めます。"),
         ])
@@ -89,7 +89,7 @@ class TestDecisionDetection:
         assert len(data["decisions"]) > 0
 
     def test_detects_english_decision(self, project_dir):
-        """英語の決定パターンを検出"""
+        """Detects English decision patterns"""
         transcript = create_transcript(project_dir, [
             ("assistant", "We decided to use React for the frontend."),
         ])
@@ -101,7 +101,7 @@ class TestDecisionDetection:
         assert len(data["decisions"]) > 0
 
     def test_ignores_user_messages(self, project_dir):
-        """ユーザーメッセージは検出対象外"""
+        """User messages are not detection targets"""
         transcript = create_transcript(project_dir, [
             ("user", "Reactを採用することに決めました。"),
         ])
@@ -113,7 +113,7 @@ class TestDecisionDetection:
         assert len(data["decisions"]) == 0
 
     def test_no_transcript_exits_cleanly(self, project_dir):
-        """transcript がない場合は正常終了"""
+        """Exits normally when no transcript is available"""
         result = run_on_stop(project_dir, {})
         assert result.returncode == 0
 
@@ -121,7 +121,7 @@ class TestDecisionDetection:
         assert len(data["decisions"]) == 0
 
     def test_estimates_category(self, project_dir):
-        """カテゴリが自動推定される"""
+        """Category is automatically estimated"""
         transcript = create_transcript(project_dir, [
             ("assistant", "アーキテクチャはマイクロサービス構成に決めました。"),
         ])
@@ -135,7 +135,7 @@ class TestDecisionDetection:
         assert decisions[0]["category"] == "architecture"
 
     def test_supersedes_similar_decision(self, project_dir):
-        """類似の既存意思決定を superseded にマークする"""
+        """Marks similar existing decisions as superseded"""
         decisions_file = project_dir / ".claude" / "context" / "decisions.json"
         decisions_file.write_text(
             json.dumps({
@@ -166,11 +166,11 @@ class TestDecisionDetection:
 
         data = load_decisions(project_dir)
         statuses = [d["status"] for d in data["decisions"]]
-        # 新しい意思決定が追加されている
+        # A new active decision has been added
         assert "active" in statuses
 
     def test_no_duplicate_detection(self, project_dir):
-        """同じ文から重複検出しない"""
+        """Does not detect duplicates from the same text"""
         transcript = create_transcript(project_dir, [
             ("assistant", "TypeScriptを使用することに決めました。TypeScriptを使用することに決めました。"),
         ])
@@ -179,5 +179,5 @@ class TestDecisionDetection:
         run_on_stop(project_dir, event_data)
 
         data = load_decisions(project_dir)
-        # 重複は除外される
+        # Duplicates are excluded
         assert len(data["decisions"]) == 1

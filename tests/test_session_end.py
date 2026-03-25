@@ -1,4 +1,4 @@
-"""session_end.py のテスト"""
+"""Tests for session_end.py"""
 
 import json
 import subprocess
@@ -36,7 +36,7 @@ def run_session_end(project_dir, event_data=None):
 
 class TestSessionEnd:
     def test_creates_context_summary(self, project_dir):
-        """context_summary.md が生成される"""
+        """context_summary.md is generated"""
         result = run_session_end(project_dir)
         assert result.returncode == 0
 
@@ -44,10 +44,10 @@ class TestSessionEnd:
         assert summary.exists()
         content = summary.read_text(encoding="utf-8")
         assert "# Context Summary" in content
-        assert "セッション情報" in content
+        assert "Session Info" in content
 
     def test_summary_contains_session_info(self, project_dir):
-        """サマリーにセッション情報が含まれる"""
+        """Summary contains session information"""
         event_data = {"session_id": "abc-123", "reason": "user_exit"}
         run_session_end(project_dir, event_data)
 
@@ -56,7 +56,7 @@ class TestSessionEnd:
         assert "user_exit" in content
 
     def test_summary_contains_decision_counts(self, project_dir):
-        """サマリーに意思決定の件数が含まれる"""
+        """Summary contains decision counts"""
         decisions_file = project_dir / ".claude" / "context" / "decisions.json"
         decisions_file.write_text(
             json.dumps({
@@ -81,12 +81,12 @@ class TestSessionEnd:
         run_session_end(project_dir)
 
         content = (project_dir / ".claude" / "context" / "context_summary.md").read_text(encoding="utf-8")
-        assert "アクティブ: 1件" in content
-        assert "更新済み: 1件" in content
-        assert "合計: 2件" in content
+        assert "Active: 1" in content
+        assert "Superseded: 1" in content
+        assert "Total: 2" in content
 
     def test_creates_snapshot(self, project_dir):
-        """decisions_history にスナップショットが保存される"""
+        """A snapshot is saved to decisions_history"""
         run_session_end(project_dir)
 
         history_dir = project_dir / ".claude" / "context" / "decisions_history"
@@ -96,7 +96,7 @@ class TestSessionEnd:
         assert (snapshots[0] / "decisions.json").exists()
 
     def test_snapshot_matches_current_decisions(self, project_dir):
-        """スナップショットの内容が現在の decisions.json と一致する"""
+        """Snapshot content matches the current decisions.json"""
         decisions_data = {
             "version": "1.0.0",
             "last_updated": "2026-03-25T00:00:00",
@@ -119,11 +119,11 @@ class TestSessionEnd:
         assert snapshot_data["decisions"][0]["title"] == "Snapshot Test"
 
     def test_snapshot_cleanup_keeps_30(self, project_dir):
-        """古いスナップショットは30件まで保持"""
+        """Old snapshots are retained up to 30"""
         history_dir = project_dir / ".claude" / "context" / "decisions_history"
         history_dir.mkdir(parents=True)
 
-        # 35個の古いスナップショットを作成
+        # Create 35 old snapshots
         for i in range(35):
             snap_dir = history_dir / f"20260301T{i:06d}"
             snap_dir.mkdir()
@@ -132,13 +132,13 @@ class TestSessionEnd:
         run_session_end(project_dir)
 
         snapshots = list(history_dir.iterdir())
-        # 30件 + 新規1件 = 最大30件に保持
+        # 30 kept + 1 new = max 31
         assert len(snapshots) <= 31
 
     def test_handles_empty_decisions(self, project_dir):
-        """意思決定が0件でも正常終了する"""
+        """Exits normally even with 0 decisions"""
         result = run_session_end(project_dir)
         assert result.returncode == 0
 
         content = (project_dir / ".claude" / "context" / "context_summary.md").read_text(encoding="utf-8")
-        assert "アクティブ: 0件" in content
+        assert "Active: 0" in content

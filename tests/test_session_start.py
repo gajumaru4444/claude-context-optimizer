@@ -1,4 +1,4 @@
-"""session_start.py のテスト"""
+"""Tests for session_start.py"""
 
 import json
 import subprocess
@@ -12,10 +12,10 @@ HOOKS_DIR = Path(__file__).parent.parent / "templates" / ".claude" / "hooks"
 
 @pytest.fixture
 def project_dir(tmp_path):
-    """テスト用プロジェクトディレクトリを作成"""
+    """Create a test project directory"""
     context_dir = tmp_path / ".claude" / "context"
     context_dir.mkdir(parents=True)
-    # 空の decisions.json
+    # Empty decisions.json
     (context_dir / "decisions.json").write_text(
         json.dumps({"version": "1.0.0", "last_updated": None, "decisions": []}),
         encoding="utf-8",
@@ -25,7 +25,7 @@ def project_dir(tmp_path):
 
 
 def run_session_start(project_dir, event_data=None):
-    """session_start.py を実行"""
+    """Run session_start.py"""
     if event_data is None:
         event_data = {"session_id": "test-session", "trigger": "startup"}
     result = subprocess.run(
@@ -40,7 +40,7 @@ def run_session_start(project_dir, event_data=None):
 
 class TestSessionStart:
     def test_creates_claude_md_when_missing(self, project_dir):
-        """CLAUDE.md がない場合に新規作成される"""
+        """Creates a new CLAUDE.md when it does not exist"""
         result = run_session_start(project_dir)
         assert result.returncode == 0
 
@@ -51,7 +51,7 @@ class TestSessionStart:
         assert "<!-- CONTEXT-OPTIMIZER:END -->" in content
 
     def test_injects_into_existing_claude_md(self, project_dir):
-        """既存の CLAUDE.md にセクションを追記する"""
+        """Appends the section to an existing CLAUDE.md"""
         claude_md = project_dir / "CLAUDE.md"
         claude_md.write_text("# My Project\n\nExisting content.\n", encoding="utf-8")
 
@@ -64,7 +64,7 @@ class TestSessionStart:
         assert "<!-- CONTEXT-OPTIMIZER:START -->" in content
 
     def test_updates_existing_section(self, project_dir):
-        """既存の optimizer セクションを更新する"""
+        """Updates the existing optimizer section"""
         claude_md = project_dir / "CLAUDE.md"
         claude_md.write_text(
             "# My Project\n\n"
@@ -77,10 +77,10 @@ class TestSessionStart:
 
         content = claude_md.read_text(encoding="utf-8")
         assert "old content" not in content
-        assert "コンテキスト最適化" in content
+        assert "Context Optimization" in content
 
     def test_injects_active_decisions(self, project_dir):
-        """アクティブな意思決定が CLAUDE.md に注入される"""
+        """Active decisions are injected into CLAUDE.md"""
         decisions_file = project_dir / ".claude" / "context" / "decisions.json"
         decisions_file.write_text(
             json.dumps({
@@ -107,10 +107,10 @@ class TestSessionStart:
 
         content = (project_dir / "CLAUDE.md").read_text(encoding="utf-8")
         assert "TypeScriptを採用" in content
-        assert "アクティブな意思決定: 1件" in content
+        assert "Active decisions: 1" in content
 
     def test_injects_context_summary(self, project_dir):
-        """前回のサマリーが CLAUDE.md に注入される"""
+        """The previous session summary is injected into CLAUDE.md"""
         summary_file = project_dir / ".claude" / "context" / "context_summary.md"
         summary_file.write_text("前回はAPIの設計を行いました。", encoding="utf-8")
 
@@ -121,16 +121,16 @@ class TestSessionStart:
         assert "前回はAPIの設計を行いました。" in content
 
     def test_outputs_additional_context(self, project_dir):
-        """stdout に additionalContext JSON を出力する"""
+        """Outputs additionalContext JSON to stdout"""
         result = run_session_start(project_dir)
         assert result.returncode == 0
 
         output = json.loads(result.stdout)
         assert "additionalContext" in output
-        assert "セッション開始" in output["additionalContext"]
+        assert "Session started" in output["additionalContext"]
 
     def test_handles_corrupted_decisions_json(self, project_dir):
-        """壊れた decisions.json でもクラッシュしない"""
+        """Does not crash on corrupted decisions.json"""
         decisions_file = project_dir / ".claude" / "context" / "decisions.json"
         decisions_file.write_text("not valid json{{{", encoding="utf-8")
 
@@ -138,7 +138,7 @@ class TestSessionStart:
         assert result.returncode == 0
 
     def test_superseded_decisions_shown_separately(self, project_dir):
-        """superseded な意思決定が参考として表示される"""
+        """Superseded decisions are shown in a separate reference section"""
         decisions_file = project_dir / ".claude" / "context" / "decisions.json"
         decisions_file.write_text(
             json.dumps({
@@ -175,4 +175,4 @@ class TestSessionStart:
 
         content = (project_dir / "CLAUDE.md").read_text(encoding="utf-8")
         assert "TypeScriptに変更" in content
-        assert "更新済みの意思決定" in content
+        assert "Superseded Decisions" in content

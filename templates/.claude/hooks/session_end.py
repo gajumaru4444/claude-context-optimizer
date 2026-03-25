@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 session_end.py - SessionEnd hook
-セッション終了時にスナップショットを保存し、context_summary.mdを更新する
+Saves a snapshot and updates context_summary.md at session end
 """
 
 import json
@@ -28,11 +28,11 @@ def load_decisions(context_dir: Path) -> dict:
 
 
 def save_snapshot(context_dir: Path, decisions_data: dict) -> Path:
-    """decisions.jsonのスナップショットを保存する"""
+    """Save a snapshot of decisions.json"""
     history_dir = context_dir / "decisions_history"
     history_dir.mkdir(parents=True, exist_ok=True)
 
-    # タイムスタンプベースのディレクトリ名
+    # Timestamp-based directory name
     ts = datetime.now().strftime("%Y%m%dT%H%M%S")
     snapshot_dir = history_dir / ts
     snapshot_dir.mkdir(parents=True, exist_ok=True)
@@ -41,7 +41,7 @@ def save_snapshot(context_dir: Path, decisions_data: dict) -> Path:
     with open(snapshot_file, "w", encoding="utf-8") as f:
         json.dump(decisions_data, f, ensure_ascii=False, indent=2)
 
-    # 古いスナップショットのクリーンアップ（最新30件を保持）
+    # Clean up old snapshots (keep the latest 30)
     snapshots = sorted(history_dir.iterdir())
     if len(snapshots) > 30:
         for old in snapshots[:-30]:
@@ -51,14 +51,14 @@ def save_snapshot(context_dir: Path, decisions_data: dict) -> Path:
 
 
 def generate_summary(decisions_data: dict, session_info: dict) -> str:
-    """context_summary.mdの内容を生成する"""
+    """Generate the content of context_summary.md"""
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     decisions = decisions_data.get("decisions", [])
 
     active = [d for d in decisions if d.get("status") == "active"]
     superseded = [d for d in decisions if d.get("status") == "superseded"]
 
-    # カテゴリ別に集計
+    # Aggregate by category
     categories: dict[str, list] = {}
     for d in active:
         cat = d.get("category", "general")
@@ -67,24 +67,24 @@ def generate_summary(decisions_data: dict, session_info: dict) -> str:
     lines = [
         "# Context Summary",
         "",
-        "_このファイルはsession_end.pyによって自動更新されます_",
+        "_This file is auto-updated by session_end.py_",
         "",
-        f"## 最終更新",
+        f"## Last Updated",
         f"{now}",
         "",
-        f"## セッション情報",
-        f"- セッションID: {session_info.get('session_id', 'unknown')}",
-        f"- 終了理由: {session_info.get('reason', 'unknown')}",
+        f"## Session Info",
+        f"- Session ID: {session_info.get('session_id', 'unknown')}",
+        f"- End reason: {session_info.get('reason', 'unknown')}",
         "",
-        f"## 意思決定サマリー",
-        f"- アクティブ: {len(active)}件",
-        f"- 更新済み: {len(superseded)}件",
-        f"- 合計: {len(decisions)}件",
+        f"## Decision Summary",
+        f"- Active: {len(active)}",
+        f"- Superseded: {len(superseded)}",
+        f"- Total: {len(decisions)}",
         "",
     ]
 
     if active:
-        lines.append("## アクティブな意思決定（カテゴリ別）")
+        lines.append("## Active Decisions (By Category)")
         lines.append("")
         for cat, items in sorted(categories.items()):
             lines.append(f"### {cat}")
@@ -96,13 +96,13 @@ def generate_summary(decisions_data: dict, session_info: dict) -> str:
             lines.append("")
 
     if superseded:
-        lines.append("## 更新済みの意思決定（最新5件）")
+        lines.append("## Superseded Decisions (Latest 5)")
         lines.append("")
         for d in superseded[-5:]:
             v = d.get("version", "v?")
             title = d.get("title", "")
             superseded_at = d.get("superseded_at", "")[:10]
-            lines.append(f"- ~~{v}~~ {title} _(更新: {superseded_at})_")
+            lines.append(f"- ~~{v}~~ {title} _(superseded: {superseded_at})_")
         lines.append("")
 
     return "\n".join(lines)
@@ -120,10 +120,10 @@ def main():
 
     decisions_data = load_decisions(context_dir)
 
-    # スナップショット保存
+    # Save snapshot
     snapshot_path = save_snapshot(context_dir, decisions_data)
 
-    # context_summary.md更新
+    # Update context_summary.md
     session_info = {
         "session_id": event_data.get("session_id", "unknown"),
         "reason": event_data.get("reason", "unknown"),
@@ -136,9 +136,9 @@ def main():
 
     active_count = len([d for d in decisions_data.get("decisions", []) if d.get("status") == "active"])
     print(
-        f"[Context Optimizer] セッション終了処理完了\n"
-        f"  スナップショット: {snapshot_path}\n"
-        f"  アクティブな意思決定: {active_count}件",
+        f"[Context Optimizer] Session end processing complete\n"
+        f"  Snapshot: {snapshot_path}\n"
+        f"  Active decisions: {active_count}",
         file=sys.stderr,
     )
 

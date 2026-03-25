@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 on_stop.py - Stop hook
-Claude の応答完了時に意思決定を検出してdecisions.jsonに保存する
+Detects decisions from Claude's response upon completion and saves them to decisions.json
 """
 
 import json
@@ -12,9 +12,9 @@ from datetime import datetime
 from pathlib import Path
 
 
-# 意思決定を示す日本語・英語パターン
+# Decision-indicating patterns in Japanese and English
 DECISION_PATTERNS = [
-    # 日本語パターン
+    # Japanese patterns
     (r"(.{5,80})(?:に決め|と決め|を決め|で決め)", "decision"),
     (r"(.{5,80})(?:を採用|に採用|で採用)", "adoption"),
     (r"(.{5,80})(?:方針で進め|方針にし|方針とし)", "policy"),
@@ -22,12 +22,12 @@ DECISION_PATTERNS = [
     (r"(.{5,80})(?:アーキテクチャ|設計|構成)(?:とし|にし|で進め)", "architecture"),
     (r"(?:結論として|まとめると|方針として)[：:]\s*(.{5,100})", "conclusion"),
     (r"(?:〜|→)\s*(.{5,80})(?:で実装|で開発|を実装|を採用)", "implementation"),
-    # 英語パターン
+    # English patterns
     (r"(?:decided? to|will use|going with|adopted?)\s+(.{5,80})", "decision_en"),
     (r"(?:the approach is|our strategy is|we'll)\s+(.{5,80})", "strategy_en"),
 ]
 
-# カテゴリ推定キーワード
+# Category estimation keywords
 CATEGORY_KEYWORDS = {
     "architecture": ["アーキテクチャ", "設計", "構成", "architecture", "design", "structure"],
     "tech_stack": ["フレームワーク", "ライブラリ", "言語", "DB", "データベース", "framework", "library"],
@@ -62,7 +62,7 @@ def save_decisions(context_dir: Path, data: dict):
 
 
 def estimate_category(text: str) -> str:
-    """テキストからカテゴリを推定する"""
+    """Estimate the category from the text"""
     text_lower = text.lower()
     for category, keywords in CATEGORY_KEYWORDS.items():
         if any(kw.lower() in text_lower for kw in keywords):
@@ -71,10 +71,10 @@ def estimate_category(text: str) -> str:
 
 
 def generate_version(decisions: list) -> str:
-    """次のバージョン番号を生成する"""
+    """Generate the next version number"""
     if not decisions:
         return "v1"
-    # 最大バージョン番号を探す
+    # Find the maximum version number
     max_v = 0
     for d in decisions:
         v = d.get("version", "v0")
@@ -87,20 +87,20 @@ def generate_version(decisions: list) -> str:
 
 
 def detect_decisions(text: str) -> list:
-    """テキストから意思決定を検出する"""
+    """Detect decisions from the text"""
     found = []
     seen_titles = set()
 
     for pattern, decision_type in DECISION_PATTERNS:
         for match in re.finditer(pattern, text, re.MULTILINE | re.IGNORECASE):
             title = match.group(1).strip() if match.lastindex else match.group(0).strip()
-            # 重複チェック（先頭20文字で）
+            # Deduplication check (by first 20 characters)
             key = title[:20]
             if key in seen_titles:
                 continue
             seen_titles.add(key)
 
-            # 短すぎる・長すぎるものはスキップ
+            # Skip if too short or too long
             if len(title) < 5 or len(title) > 100:
                 continue
 
@@ -114,7 +114,7 @@ def detect_decisions(text: str) -> list:
 
 
 def find_superseded(decisions: list, new_title: str) -> list:
-    """同カテゴリの既存意思決定で置き換えられるものを見つける"""
+    """Find existing decisions in the same category that would be superseded"""
     superseded_ids = []
     new_words = set(new_title.lower().split())
 
@@ -122,7 +122,7 @@ def find_superseded(decisions: list, new_title: str) -> list:
         if d.get("status") != "active":
             continue
         existing_words = set(d.get("title", "").lower().split())
-        # 単語の重複率が50%以上なら関連する意思決定とみなす
+        # Consider it a related decision if word overlap is 50% or more
         if len(new_words) > 0 and len(existing_words) > 0:
             overlap = len(new_words & existing_words) / min(len(new_words), len(existing_words))
             if overlap >= 0.5:
@@ -132,12 +132,12 @@ def find_superseded(decisions: list, new_title: str) -> list:
 
 
 def parse_transcript_for_decisions(event_data: dict) -> list:
-    """イベントデータ（transcript等）から意思決定テキストを抽出する"""
-    # Stop hookではassistantの最後の応答が取れる場合がある
-    # transcript pathが利用可能な場合はそこから読む
+    """Extract decision text from event data (transcript, etc.)"""
+    # In Stop hook, the assistant's last response may be available
+    # Read from transcript path if available
     texts = []
 
-    # event_dataにtranscript_pathがある場合
+    # If transcript_path exists in event_data
     transcript_path = event_data.get("transcript_path")
     if transcript_path and Path(transcript_path).exists():
         try:
@@ -148,7 +148,7 @@ def parse_transcript_for_decisions(event_data: dict) -> list:
                         continue
                     try:
                         entry = json.loads(line)
-                        # assistantのメッセージのみ対象
+                        # Only target assistant messages
                         if entry.get("role") == "assistant":
                             content = entry.get("content", "")
                             if isinstance(content, list):
@@ -171,7 +171,7 @@ def main():
     except (json.JSONDecodeError, EOFError):
         event_data = {}
 
-    # stop_hook_activeチェック（無限ループ防止）
+    # stop_hook_active check (prevent infinite loop)
     if event_data.get("stop_hook_active"):
         sys.exit(0)
 
@@ -179,14 +179,14 @@ def main():
     context_dir = project_root / ".claude" / "context"
     context_dir.mkdir(parents=True, exist_ok=True)
 
-    # transcript から意思決定テキストを収集
+    # Collect decision text from transcript
     texts = parse_transcript_for_decisions(event_data)
 
     if not texts:
-        # transcriptが取れない場合は何もしない
+        # Do nothing if transcript is unavailable
         sys.exit(0)
 
-    # 意思決定を検出
+    # Detect decisions
     all_detected = []
     for text in texts:
         detected = detect_decisions(text)
@@ -195,7 +195,7 @@ def main():
     if not all_detected:
         sys.exit(0)
 
-    # decisions.jsonを更新
+    # Update decisions.json
     decisions_data = load_decisions(context_dir)
     decisions = decisions_data.get("decisions", [])
     now = datetime.now().isoformat()
@@ -204,7 +204,7 @@ def main():
     for detected in all_detected:
         title = detected["title"]
 
-        # 重複する既存エントリをsupersededに
+        # Mark duplicate existing entries as superseded
         superseded_ids = find_superseded(decisions, title)
         for sid in superseded_ids:
             for d in decisions:
@@ -212,14 +212,14 @@ def main():
                     d["status"] = "superseded"
                     d["superseded_at"] = now
 
-        # 新しい意思決定を追加
+        # Add new decision
         new_id = f"dec_{len(decisions) + 1:04d}"
         new_version = generate_version(decisions)
         decisions.append({
             "id": new_id,
             "version": new_version,
             "title": title,
-            "content": "",          # 詳細は後で手動補完 or 別途抽出
+            "content": "",          # Details can be filled in manually or extracted separately
             "category": detected["category"],
             "type": detected["type"],
             "status": "active",
@@ -233,10 +233,10 @@ def main():
     decisions_data["decisions"] = decisions
     save_decisions(context_dir, decisions_data)
 
-    # stderrにログ出力（Ctrl+O verbose modeで確認可能）
+    # Log output to stderr (viewable in Ctrl+O verbose mode)
     print(
-        f"[Context Optimizer] {new_count}件の意思決定を記録しました "
-        f"(合計: {len([d for d in decisions if d.get('status') == 'active'])}件 active)",
+        f"[Context Optimizer] Recorded {new_count} decision(s) "
+        f"(total: {len([d for d in decisions if d.get('status') == 'active'])} active)",
         file=sys.stderr,
     )
 
