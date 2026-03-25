@@ -1,0 +1,42 @@
+{
+  "name": "claude-context-optimizer",
+  "version": "1.0.0",
+  "description": "Claude Code context optimization hooks — auto-records decisions, injects them into CLAUDE.md, and reduces forgetting risk in long sessions",
+  "keywords": [
+    "claude",
+    "claude-code",
+    "anthropic",
+    "ai",
+    "context",
+    "hooks",
+    "llm",
+    "developer-tools"
+  ],
+  "author": {
+    "name": "gajumaru4444",
+    "url": "https://github.com/gajumaru4444"
+  },
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "claude-context-optimizer": "./bin/cli.js"
+  },
+  "files": [
+    "bin/",
+    "templates/",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/gajumaru4444/claude-context-optimizer.git"
+  },
+  "bugs": {
+    "url": "https://github.com/gajumaru4444/claude-context-optimizer/issues"
+  },
+  "homepage": "https://github.com/gajumaru4444/claude-context-optimizer#readme"
+}

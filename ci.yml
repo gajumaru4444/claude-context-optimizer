@@ -1,0 +1,112 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [18, 20, 22]
+        python-version: ["3.10", "3.11", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Test CLI help
+        run: node bin/cli.js --help
+
+      - name: Test init on fresh directory
+        run: |
+          mkdir /tmp/test-fresh
+          cd /tmp/test-fresh
+          echo "" | node $GITHUB_WORKSPACE/bin/cli.js || true
+          test -f .claude/settings.json
+          test -f .claude/hooks/session_start.py
+          test -f .claude/hooks/on_stop.py
+          test -f .claude/hooks/session_end.py
+          test -f .claude/hooks/decision_manager.py
+          test -f .claude/context/decisions.json
+          echo "✔ All expected files present"
+
+      - name: Test merge with existing settings.json
+        run: |
+          mkdir -p /tmp/test-merge/.claude
+          echo '{"hooks":{"PostToolUse":[{"matcher":"Edit","hooks":[{"type":"command","command":"prettier"}]}]},"permissions":{"allow":["Bash(git *)"]}}' \
+            > /tmp/test-merge/.claude/settings.json
+          cd /tmp/test-merge
+          echo "" | node $GITHUB_WORKSPACE/bin/cli.js || true
+          # Verify existing key preserved
+          python3 -c "
+          import json
+          with open('.claude/settings.json') as f:
+            d = json.load(f)
+          assert 'PostToolUse' in d['hooks'], 'PostToolUse missing'
+          assert 'SessionStart' in d['hooks'], 'SessionStart missing'
+          assert d['permissions']['allow'] == ['Bash(git *)'], 'permissions lost'
+          print('✔ Merge verified')
+          "
+
+      - name: Test merge with existing CLAUDE.md
+        run: |
+          mkdir /tmp/test-claude-merge
+          echo -e '# My Project\n\n## Rules\n- Use TypeScript' \
+            > /tmp/test-claude-merge/CLAUDE.md
+          cd /tmp/test-claude-merge
+          echo "" | node $GITHUB_WORKSPACE/bin/cli.js || true
+          grep -q "CONTEXT-OPTIMIZER:START" CLAUDE.md
+          grep -q "My Project" CLAUDE.md
+          echo "✔ CLAUDE.md merge verified"
+
+      - name: Test decision_manager CLI
+        run: |
+          mkdir /tmp/test-dm
+          cd /tmp/test-dm
+          echo "" | node $GITHUB_WORKSPACE/bin/cli.js || true
+          CLAUDE_PROJECT_DIR=$(pwd) python3 .claude/hooks/decision_manager.py \
+            add "Test decision" --content "For CI" --category architecture
+          CLAUDE_PROJECT_DIR=$(pwd) python3 .claude/hooks/decision_manager.py list
+          CLAUDE_PROJECT_DIR=$(pwd) python3 .claude/hooks/decision_manager.py \
+            update dec_0001 --title "Updated decision"
+          CLAUDE_PROJECT_DIR=$(pwd) python3 .claude/hooks/decision_manager.py history
+          echo "✔ decision_manager verified"
+
+      - name: Test session_start hook
+        run: |
+          cd /tmp/test-dm
+          echo '{"session_id":"ci-test","trigger":"startup"}' | \
+            CLAUDE_PROJECT_DIR=$(pwd) python3 .claude/hooks/session_start.py
+          grep -q "CONTEXT-OPTIMIZER:START" CLAUDE.md
+          echo "✔ session_start hook verified"
+
+      - name: Test session_end hook
+        run: |
+          cd /tmp/test-dm
+          echo '{"session_id":"ci-test","reason":"exit"}' | \
+            CLAUDE_PROJECT_DIR=$(pwd) python3 .claude/hooks/session_end.py
+          test -f .claude/context/context_summary.md
+          ls .claude/context/decisions_history/
+          echo "✔ session_end hook verified"
+
+      - name: Lint Python hooks
+        run: |
+          pip install pyflakes
+          pyflakes templates/.claude/hooks/session_start.py
+          pyflakes templates/.claude/hooks/on_stop.py
+          pyflakes templates/.claude/hooks/session_end.py
+          pyflakes templates/.claude/hooks/decision_manager.py
+          echo "✔ Python lint passed"
